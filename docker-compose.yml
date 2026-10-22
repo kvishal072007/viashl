@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # MongoDB Database Container
+  mongodb:
+    image: mongo:7.0
+    container_name: envirotrack_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - envirotrack_network
+
+  # Redis Cache Container
+  redis:
+    image: redis:7-alpine
+    container_name: envirotrack_redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_secure_pass_2026}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secure_pass_2026}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - envirotrack_network
+
+  # Express.js TypeScript Backend API
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: envirotrack_server
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      MONGO_URI: mongodb://mongodb:27017/envirotrack
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secure_pass_2026}
+      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_envirotrack_key_987654321}
+      JWT_EXPIRES_IN: 7d
+      CLIENT_ORIGIN: http://localhost:3000
+    depends_on:
+      - mongodb
+      - redis
+    ports:
+      - "5000:5000"
+    networks:
+      - envirotrack_network
+
+  # React 18 + Vite + Tailwind Frontend
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: envirotrack_client
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - server
+    networks:
+      - envirotrack_network
+
+networks:
+  envirotrack_network:
+    driver: bridge
+
+volumes:
+  mongo_data:
+  redis_data:
